@@ -20,9 +20,11 @@ from .models import (
     IconInfo,
 )
 from .job_queue import job_queue, Job
+from .auth import router as auth_router
 from ..config import Config
 from ..generator import IconGenerator
 from ..processor import IconProcessor
+from ..auth.oauth import configure_oauth
 
 
 # Create FastAPI app
@@ -43,6 +45,12 @@ app.add_middleware(
 
 # Ensure output directory exists
 Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Configure OAuth providers
+configure_oauth()
+
+# Include auth router
+app.include_router(auth_router)
 
 # Mount static files for serving generated icons
 app.mount("/output", StaticFiles(directory=str(Config.OUTPUT_DIR)), name="output")
