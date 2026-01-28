@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health to Obsidian Icon Generator - Anne Truitt Inspired</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: #1e1e1e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        h1 {
+            color: #7c3aed;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 14px;
+        }
+        canvas {
+            border: 2px solid #333;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            image-rendering: crisp-edges;
+        }
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background: #7c3aed;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #6d28d9;
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .info {
+            color: #666;
+            margin-top: 20px;
+            max-width: 600px;
+            text-align: center;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Health → Obsidian Icon</h1>
+    <div class="subtitle">Inspired by Anne Truitt's Minimalist Color Field Paintings</div>
+    <canvas id="iconCanvas" width="1024" height="1024"></canvas>
+    <div class="controls">
+        <button onclick="regenerateIcon()">Generate New Variation</button>
+        <button onclick="downloadIcon()">Download Icon (1024x1024)</button>
+    </div>
+    <div class="info">
+        Design concept: Vertical columns representing health data streams (heart rate, steps, sleep)
+        flowing into Obsidian's markdown format. Clean geometric forms with bold color fields.
+    </div>
+
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Anne Truitt inspired color palettes - bold, flat colors
+        const colorPalettes = [
+            {
+                // Health + Obsidian Purple
+                bg: '#2d1b4e',
+                columns: [
+                    { color: '#ef4444', label: 'heart' },    // Red - heart rate
+                    { color: '#f59e0b', label: 'activity' }, // Orange - activity
+                    { color: '#7c3aed', label: 'obsidian' }, // Purple - Obsidian
+                    { color: '#3b82f6', label: 'sleep' },    // Blue - sleep
+                ],
+                accent: '#a78bfa'
+            },
+            {
+                // Warm minimal
+                bg: '#1a1625',
+                columns: [
+                    { color: '#dc2626', label: 'heart' },
+                    { color: '#8b5cf6', label: 'obsidian' },
+                    { color: '#06b6d4', label: 'data' },
+                    { color: '#ec4899', label: 'health' },
+                ],
+                accent: '#c084fc'
+            },
+            {
+                // Cool field
+                bg: '#0f172a',
+                columns: [
+                    { color: '#f43f5e', label: 'heart' },
+                    { color: '#6366f1', label: 'obsidian' },
+                    { color: '#14b8a6', label: 'wellness' },
+                    { color: '#a855f7', label: 'notes' },
+                ],
+                accent: '#818cf8'
+            }
+        ];
+
+        let currentPalette = 0;
+
+        function generateIcon() {
+            const palette = colorPalettes[currentPalette];
+            const size = 1024;
+            const padding = 120;
+            const columns = palette.columns;
+
+            // Background - solid color field
+            ctx.fillStyle = palette.bg;
+            ctx.fillRect(0, 0, size, size);
+
+            // Calculate column dimensions
+            const availableWidth = size - (padding * 2);
+            const columnWidth = availableWidth / columns.length;
+            const gapWidth = columnWidth * 0.15;
+            const actualColumnWidth = columnWidth - gapWidth;
+
+            // Draw vertical columns (Anne Truitt style)
+            columns.forEach((col, i) => {
+                const x = padding + (i * columnWidth) + (gapWidth / 2);
+
+                // Vary heights slightly for visual interest while maintaining minimalism
+                const heightVariations = [0.75, 0.85, 0.92, 0.82];
+                const heightFactor = heightVariations[i % heightVariations.length];
+                const columnHeight = (size - padding * 2) * heightFactor;
+                const y = padding + ((size - padding * 2) - columnHeight) * 0.5;
+
+                // Draw column - solid color field
+                ctx.fillStyle = col.color;
+                ctx.fillRect(x, y, actualColumnWidth, columnHeight);
+
+                // Subtle top highlight (Truitt's painted edge effect)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(x, y, actualColumnWidth, 8);
+            });
+
+            // Add subtle markdown symbol in bottom right (minimal)
+            drawMarkdownSymbol(size - 180, size - 180, 100, palette.accent);
+
+            // Add subtle heart pulse at top (representing health data)
+            drawHealthSymbol(size / 2 - 50, 100, 100, palette.accent);
+        }
+
+        function drawMarkdownSymbol(x, y, size, color) {
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.2;
+
+            // Simplified "M" for markdown
+            const fontSize = size * 0.8;
+            ctx.font = `bold ${fontSize}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('M↓', x + size/2, y + size/2);
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        function drawHealthSymbol(x, y, size, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 6;
+            ctx.globalAlpha = 0.25;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Simple pulse line
+            ctx.beginPath();
+            ctx.moveTo(x, y + size/2);
+            ctx.lineTo(x + size * 0.3, y + size/2);
+            ctx.lineTo(x + size * 0.4, y + size * 0.2);
+            ctx.lineTo(x + size * 0.5, y + size * 0.8);
+            ctx.lineTo(x + size * 0.6, y + size/2);
+            ctx.lineTo(x + size, y + size/2);
+            ctx.stroke();
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        function regenerateIcon() {
+            currentPalette = (currentPalette + 1) % colorPalettes.length;
+            generateIcon();
+        }
+
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'health-to-obsidian-icon-1024.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Generate initial icon
+        generateIcon();
+    </script>
+</body>
+</html>

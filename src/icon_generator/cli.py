@@ -1,0 +1,211 @@
+"""Command-line interface for the iOS App Icon Generator."""
+
+import click
+from pathlib import Path
+from .config import Config
+from .generator import IconGenerator
+from .processor import IconProcessor
+
+
+@click.group()
+@click.version_option(version="0.1.0")
+def cli():
+    """iOS App Icon Generator - AI-powered app icon creation."""
+    pass
+
+
+@cli.command()
+@click.option(
+    '--subject',
+    required=True,
+    help='What to generate (e.g., "happy cat", "mountain logo")'
+)
+@click.option(
+    '--style',
+    type=click.Choice(['ios', 'flat', 'vector', 'custom']),
+    default='ios',
+    help='Icon style to generate'
+)
+@click.option(
+    '--custom-style',
+    type=str,
+    default=None,
+    help='Full custom prompt (required when style="custom")'
+)
+@click.option(
+    '--variations',
+    type=int,
+    default=4,
+    help='Number of variations to generate'
+)
+@click.option(
+    '--color',
+    type=str,
+    default=None,
+    help='Background color (for flat style)'
+)
+@click.option(
+    '--no-process',
+    is_flag=True,
+    help='Skip post-processing (only generate original images)'
+)
+@click.option(
+    '--no-mask',
+    is_flag=True,
+    help='Skip iOS rounded corner mask'
+)
+@click.option(
+    '--no-remove-bg',
+    is_flag=True,
+    help='Skip background removal'
+)
+@click.option(
+    '--output-dir',
+    type=click.Path(),
+    default=None,
+    help='Custom output directory'
+)
+@click.option(
+    '--model',
+    type=str,
+    default=None,
+    help='Replicate model to use (advanced)'
+)
+@click.option(
+    '--steps',
+    type=int,
+    default=Config.DEFAULT_STEPS,
+    help='Number of inference steps'
+)
+@click.option(
+    '--guidance-scale',
+    type=float,
+    default=Config.DEFAULT_GUIDANCE_SCALE,
+    help='Guidance scale for generation'
+)
+def generate(
+    subject: str,
+    style: str,
+    custom_style: str,
+    variations: int,
+    color: str,
+    no_process: bool,
+    no_mask: bool,
+    no_remove_bg: bool,
+    output_dir: str,
+    model: str,
+    steps: int,
+    guidance_scale: float
+):
+    """Generate AI-powered app icons."""
+
+    try:
+        # Validate custom style requirement
+        if style == "custom" and not custom_style:
+            click.echo("❌ Error: --custom-style is required when using --style=custom", err=True)
+            raise click.Abort()
+
+        # Validate configuration
+        Config.validate()
+
+        # Set up output directory
+        if output_dir:
+            output_path = Path(output_dir)
+        else:
+            output_path = Config.get_output_dir(subject)
+
+        click.echo(f"\n🚀 iOS App Icon Generator")
+        click.echo(f"📁 Output directory: {output_path}\n")
+
+        # Initialize generator
+        generator = IconGenerator()
+
+        # Generate icons
+        generated_paths = generator.generate(
+            subject=subject,
+            style=style,
+            variations=variations,
+            color=color,
+            custom_style=custom_style,
+            output_dir=output_path,
+            model=model,
+            steps=steps,
+            guidance_scale=guidance_scale
+        )
+
+        click.echo(f"\n✨ Generated {len(generated_paths)} variations!")
+
+        # Post-process if not disabled
+        if not no_process:
+            click.echo(f"\n🔧 Post-processing icons...")
+
+            originals_dir = output_path / "originals"
+            results = IconProcessor.process_generated_icons(
+                originals_dir=originals_dir,
+                output_base_dir=output_path,
+                remove_bg=not no_remove_bg,
+                apply_mask=not no_mask
+            )
+
+            total_processed = sum(len(paths) for paths in results.values())
+            click.echo(f"\n✅ Generated {total_processed} processed icons!")
+
+            # Show summary
+            click.echo(f"\n📊 Summary:")
+            click.echo(f"   Original images: {len(generated_paths)}")
+            click.echo(f"   Processed variants: {len(results)}")
+            click.echo(f"   Total icon sizes: {total_processed}")
+            click.echo(f"   Output location: {output_path}")
+        else:
+            click.echo(f"\n⏭️  Skipped post-processing (--no-process flag)")
+            click.echo(f"   Original images: {len(generated_paths)}")
+            click.echo(f"   Location: {output_path / 'originals'}")
+
+        click.echo(f"\n🎉 Done! Your icons are ready at: {output_path}")
+
+    except ValueError as e:
+        click.echo(f"\n❌ Configuration Error: {e}", err=True)
+        click.echo(f"\n💡 Tip: Copy .env.example to .env and add your Replicate API token")
+        raise click.Abort()
+
+    except Exception as e:
+        click.echo(f"\n❌ Error: {e}", err=True)
+        raise
+
+
+@cli.command()
+def info():
+    """Show configuration and system information."""
+    click.echo("\n📋 iOS App Icon Generator - Configuration\n")
+
+    # Check API token
+    has_token = bool(Config.REPLICATE_API_TOKEN)
+    token_status = "✅ Set" if has_token else "❌ Not set"
+    click.echo(f"API Token: {token_status}")
+
+    if not has_token:
+        click.echo("   Get your token from: https://replicate.com/account/api-tokens")
+
+    # Show configuration
+    click.echo(f"\nDefault Settings:")
+    click.echo(f"   Output directory: {Config.OUTPUT_DIR}")
+    click.echo(f"   Image size: {Config.DEFAULT_SIZE}x{Config.DEFAULT_SIZE}")
+    click.echo(f"   Inference steps: {Config.DEFAULT_STEPS}")
+    click.echo(f"   Guidance scale: {Config.DEFAULT_GUIDANCE_SCALE}")
+    click.echo(f"   Default variations: {Config.DEFAULT_VARIATIONS}")
+
+    click.echo(f"\nSupported Styles:")
+    click.echo(f"   • ios    - iOS-style rounded app icons")
+    click.echo(f"   • flat   - Minimalist flat design icons")
+    click.echo(f"   • vector - Vector illustration style")
+    click.echo(f"   • custom - Custom prompt (use --custom-style)")
+
+    click.echo(f"\niOS Icon Sizes:")
+    sizes_str = ", ".join(str(s) for s in Config.IOS_ICON_SIZES)
+    click.echo(f"   {sizes_str}")
+
+    click.echo()
+
+
+if __name__ == '__main__':
+    cli()

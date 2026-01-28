@@ -1,0 +1,102 @@
+#!/bin/bash
+# Icon Style Generator - Easy wrapper for custom style icon generation
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Help function
+show_help() {
+    echo -e "${BLUE}🎨 Icon Style Generator${NC}"
+    echo ""
+    echo "Generate iOS app icons with custom artistic styles"
+    echo ""
+    echo "Usage:"
+    echo "  ./icon-style \"your custom style prompt here\""
+    echo ""
+    echo "Examples:"
+    echo "  ./icon-style \"minimalist geometric stacked rectangles, aluminum and translucent plexiglass\""
+    echo "  ./icon-style \"pixel art retro gaming style, 8-bit colors, nostalgic\""
+    echo "  ./icon-style \"watercolor painting, soft brushstrokes, pastel colors\""
+    echo "  ./icon-style \"art deco geometric patterns, gold and black, 1920s style\""
+    echo ""
+    echo "Options:"
+    echo "  -v, --variations N    Number of variations (default: 4)"
+    echo "  -s, --subject TEXT    What to generate (default: 'app icon')"
+    echo "  --steps N             Inference steps for quality (default: 40)"
+    echo "  --guidance N          Guidance scale (default: 8.0)"
+    echo "  -h, --help            Show this help message"
+    echo ""
+}
+
+# Default values
+VARIATIONS=4
+SUBJECT="app icon"
+STEPS=40
+GUIDANCE=8.0
+CUSTOM_STYLE=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -v|--variations)
+            VARIATIONS="$2"
+            shift 2
+            ;;
+        -s|--subject)
+            SUBJECT="$2"
+            shift 2
+            ;;
+        --steps)
+            STEPS="$2"
+            shift 2
+            ;;
+        --guidance)
+            GUIDANCE="$2"
+            shift 2
+            ;;
+        *)
+            CUSTOM_STYLE="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check if custom style was provided
+if [ -z "$CUSTOM_STYLE" ]; then
+    echo -e "${YELLOW}❌ Error: Please provide a custom style prompt${NC}"
+    echo ""
+    show_help
+    exit 1
+fi
+
+# Activate virtual environment if it exists
+if [ -d "venv/bin" ]; then
+    source venv/bin/activate
+fi
+
+# Run the generator
+echo -e "${GREEN}🚀 Generating icons with custom style...${NC}"
+echo -e "${BLUE}Style: $CUSTOM_STYLE${NC}"
+echo -e "${BLUE}Subject: $SUBJECT${NC}"
+echo -e "${BLUE}Variations: $VARIATIONS${NC}"
+echo ""
+
+icon-gen generate \
+    --subject "$SUBJECT" \
+    --style custom \
+    --custom-style "$CUSTOM_STYLE" \
+    --variations "$VARIATIONS" \
+    --steps "$STEPS" \
+    --guidance-scale "$GUIDANCE"
+
+echo ""
+echo -e "${GREEN}✅ Done!${NC}"
