@@ -172,3 +172,97 @@ class IconProcessor:
             print(f"✅ Processed {len(paths)} sizes for {variant_name}")
 
         return results
+
+    @staticmethod
+    def generate_instagram_sizes(
+        input_path: Path,
+        output_dir: Path,
+        aspect_ratio: str = "square"
+    ) -> List[Path]:
+        """
+        Generate Instagram-optimized images (no masking, proper dimensions).
+
+        Args:
+            input_path: Path to source image
+            output_dir: Directory to save resized images
+            aspect_ratio: Instagram aspect ratio (square, portrait, landscape, story)
+
+        Returns:
+            List of paths to generated image files
+        """
+        from PIL import ImageFilter
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get target dimensions
+        target_size = Config.INSTAGRAM_SIZES.get(aspect_ratio, (1080, 1080))
+        target_width, target_height = target_size
+
+        # Load the source image
+        image = Image.open(input_path)
+
+        # Ensure RGB mode for Instagram (no transparency needed)
+        if image.mode == 'RGBA':
+            # Create white background for transparency
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            background.paste(image, mask=image.split()[3])
+            image = background
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # Resize to target dimensions
+        resized = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+        # Apply slight sharpening for social media clarity
+        sharpened = resized.filter(ImageFilter.UnsharpMask(radius=1, percent=50, threshold=3))
+
+        # Save with high quality
+        output_path = output_dir / f"post-{target_width}x{target_height}.png"
+        sharpened.save(output_path, 'PNG', optimize=True)
+
+        return [output_path]
+
+    @staticmethod
+    def process_instagram_images(
+        originals_dir: Path,
+        output_base_dir: Path,
+        aspect_ratio: str = "square"
+    ) -> Dict[str, List[Path]]:
+        """
+        Process all generated images for Instagram output.
+
+        Args:
+            originals_dir: Directory containing original generated images
+            output_base_dir: Base output directory
+            aspect_ratio: Instagram aspect ratio
+
+        Returns:
+            Dictionary mapping variant names to lists of generated paths
+        """
+        instagram_dir = output_base_dir / "instagram"
+        instagram_dir.mkdir(parents=True, exist_ok=True)
+
+        results = {}
+
+        # Process each variant
+        original_images = sorted(originals_dir.glob("variant-*.png"))
+
+        for idx, original_path in enumerate(original_images, 1):
+            variant_name = original_path.stem
+            print(f"\n📸 Processing {variant_name} for Instagram...")
+
+            # Create variant subdirectory
+            variant_dir = instagram_dir / variant_name
+            variant_dir.mkdir(exist_ok=True)
+
+            # Generate Instagram size
+            paths = IconProcessor.generate_instagram_sizes(
+                input_path=original_path,
+                output_dir=variant_dir,
+                aspect_ratio=aspect_ratio
+            )
+
+            results[variant_name] = paths
+            print(f"✅ Processed Instagram image for {variant_name}")
+
+        return results

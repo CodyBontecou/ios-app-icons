@@ -13,6 +13,12 @@ class Config:
     # API Configuration
     REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
+    # Database Configuration
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/icongen"
+    )
+
     # Generation Parameters
     DEFAULT_STEPS = 30
     DEFAULT_GUIDANCE_SCALE = 7.0
@@ -38,6 +44,14 @@ class Config:
         29,    # Settings @1x
         20,    # Notification @1x
     ]
+
+    # Instagram Sizes (width x height in pixels)
+    INSTAGRAM_SIZES = {
+        "square": (1080, 1080),     # Feed posts
+        "portrait": (1080, 1350),   # 4:5 ratio, best engagement
+        "landscape": (1080, 566),   # 1.91:1 ratio
+        "story": (1080, 1920),      # 9:16 ratio, stories/reels
+    }
 
     # Output Directory
     OUTPUT_DIR = Path("output")

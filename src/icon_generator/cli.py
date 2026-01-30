@@ -174,6 +174,157 @@ def generate(
 
 
 @cli.command()
+@click.option(
+    '--subject',
+    required=True,
+    help='What to generate (e.g., "product showcase", "sunset beach")'
+)
+@click.option(
+    '--style',
+    type=click.Choice(['ios', 'flat', 'vector', 'custom']),
+    default='custom',
+    help='Visual style to use'
+)
+@click.option(
+    '--custom-style',
+    type=str,
+    default=None,
+    help='Full custom prompt (required when style="custom")'
+)
+@click.option(
+    '--aspect-ratio',
+    type=click.Choice(['square', 'portrait', 'landscape', 'story']),
+    default='square',
+    help='Instagram aspect ratio (square=1:1, portrait=4:5, landscape=1.91:1, story=9:16)'
+)
+@click.option(
+    '--variations',
+    type=int,
+    default=4,
+    help='Number of variations to generate'
+)
+@click.option(
+    '--no-process',
+    is_flag=True,
+    help='Skip post-processing (only generate original images)'
+)
+@click.option(
+    '--output-dir',
+    type=click.Path(),
+    default=None,
+    help='Custom output directory'
+)
+@click.option(
+    '--model',
+    type=str,
+    default=None,
+    help='Replicate model to use (advanced)'
+)
+@click.option(
+    '--steps',
+    type=int,
+    default=Config.DEFAULT_STEPS,
+    help='Number of inference steps'
+)
+@click.option(
+    '--guidance-scale',
+    type=float,
+    default=Config.DEFAULT_GUIDANCE_SCALE,
+    help='Guidance scale for generation'
+)
+def instagram(
+    subject: str,
+    style: str,
+    custom_style: str,
+    aspect_ratio: str,
+    variations: int,
+    no_process: bool,
+    output_dir: str,
+    model: str,
+    steps: int,
+    guidance_scale: float
+):
+    """Generate AI-powered Instagram posts."""
+
+    try:
+        # Validate custom style requirement
+        if style == "custom" and not custom_style:
+            click.echo("❌ Error: --custom-style is required when using --style=custom", err=True)
+            raise click.Abort()
+
+        # Validate configuration
+        Config.validate()
+
+        # Set up output directory
+        if output_dir:
+            output_path = Path(output_dir)
+        else:
+            output_path = Config.get_output_dir(subject)
+
+        # Get dimensions for display
+        width, height = Config.INSTAGRAM_SIZES.get(aspect_ratio, (1080, 1080))
+
+        click.echo(f"\n📸 Instagram Post Generator")
+        click.echo(f"📐 Aspect ratio: {aspect_ratio} ({width}x{height})")
+        click.echo(f"📁 Output directory: {output_path}\n")
+
+        # Initialize generator
+        generator = IconGenerator()
+
+        # Generate images
+        generated_paths = generator.generate(
+            subject=subject,
+            style=style,
+            variations=variations,
+            custom_style=custom_style,
+            output_dir=output_path,
+            model=model,
+            format="instagram",
+            aspect_ratio=aspect_ratio,
+            steps=steps,
+            guidance_scale=guidance_scale
+        )
+
+        click.echo(f"\n✨ Generated {len(generated_paths)} variations!")
+
+        # Post-process if not disabled
+        if not no_process:
+            click.echo(f"\n🔧 Processing for Instagram...")
+
+            originals_dir = output_path / "originals"
+            results = IconProcessor.process_instagram_images(
+                originals_dir=originals_dir,
+                output_base_dir=output_path,
+                aspect_ratio=aspect_ratio
+            )
+
+            total_processed = sum(len(paths) for paths in results.values())
+            click.echo(f"\n✅ Generated {total_processed} Instagram posts!")
+
+            # Show summary
+            click.echo(f"\n📊 Summary:")
+            click.echo(f"   Original images: {len(generated_paths)}")
+            click.echo(f"   Instagram posts: {total_processed}")
+            click.echo(f"   Dimensions: {width}x{height}")
+            click.echo(f"   Output location: {output_path}")
+        else:
+            click.echo(f"\n⏭️  Skipped post-processing (--no-process flag)")
+            click.echo(f"   Original images: {len(generated_paths)}")
+            click.echo(f"   Location: {output_path / 'originals'}")
+
+        click.echo(f"\n🎉 Done! Your Instagram posts are ready at: {output_path}")
+
+    except ValueError as e:
+        click.echo(f"\n❌ Configuration Error: {e}", err=True)
+        click.echo(f"\n💡 Tip: Copy .env.example to .env and add your Replicate API token")
+        raise click.Abort()
+
+    except Exception as e:
+        click.echo(f"\n❌ Error: {e}", err=True)
+        raise
+
+
+@cli.command()
 def info():
     """Show configuration and system information."""
     click.echo("\n📋 iOS App Icon Generator - Configuration\n")
@@ -203,6 +354,10 @@ def info():
     click.echo(f"\niOS Icon Sizes:")
     sizes_str = ", ".join(str(s) for s in Config.IOS_ICON_SIZES)
     click.echo(f"   {sizes_str}")
+
+    click.echo(f"\nInstagram Sizes:")
+    for name, (w, h) in Config.INSTAGRAM_SIZES.items():
+        click.echo(f"   • {name}: {w}x{h}")
 
     click.echo()
 

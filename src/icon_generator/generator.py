@@ -30,10 +30,12 @@ class IconGenerator:
         custom_style: Optional[str] = None,
         output_dir: Optional[Path] = None,
         model: Optional[str] = None,
+        format: str = "ios",
+        aspect_ratio: str = "square",
         **generation_params
     ) -> List[Path]:
         """
-        Generate app icon variations.
+        Generate app icon or Instagram post variations.
 
         Args:
             subject: What to generate (e.g., "happy cat", "mountain logo")
@@ -43,6 +45,8 @@ class IconGenerator:
             custom_style: Full custom prompt for style="custom"
             output_dir: Directory to save generated images
             model: Replicate model to use (defaults to Config.DEFAULT_MODEL)
+            format: Output format ("ios" for app icons, "instagram" for social media)
+            aspect_ratio: For Instagram: "square", "portrait", "landscape", "story"
             **generation_params: Additional parameters for the model
 
         Returns:
@@ -54,7 +58,8 @@ class IconGenerator:
             enhanced_subject,
             style=style,
             color=color,
-            custom_style=custom_style
+            custom_style=custom_style,
+            format=format
         )
 
         # Set up output directory
@@ -63,14 +68,21 @@ class IconGenerator:
         originals_dir = output_dir / "originals"
         originals_dir.mkdir(parents=True, exist_ok=True)
 
+        # Determine dimensions based on format
+        if format == "instagram":
+            width, height = Config.INSTAGRAM_SIZES.get(aspect_ratio, (1080, 1080))
+        else:
+            width = Config.DEFAULT_SIZE
+            height = Config.DEFAULT_SIZE
+
         # Prepare generation parameters
         model_name = model or Config.DEFAULT_MODEL
         params = {
             "prompt": prompt_data["prompt"],
             "negative_prompt": prompt_data["negative_prompt"],
             "num_outputs": variations,
-            "width": Config.DEFAULT_SIZE,
-            "height": Config.DEFAULT_SIZE,
+            "width": width,
+            "height": height,
             "num_inference_steps": generation_params.get("steps", Config.DEFAULT_STEPS),
             "guidance_scale": generation_params.get("guidance_scale", Config.DEFAULT_GUIDANCE_SCALE),
         }
@@ -124,7 +136,9 @@ class IconGenerator:
                 negative_prompt=prompt_data["negative_prompt"],
                 model=model_name,
                 variations=len(generated_paths),
-                params=params
+                params=params,
+                format=format,
+                aspect_ratio=aspect_ratio if format == "instagram" else None
             )
 
             return generated_paths
@@ -155,7 +169,9 @@ class IconGenerator:
         negative_prompt: str,
         model: str,
         variations: int,
-        params: Dict
+        params: Dict,
+        format: str = "ios",
+        aspect_ratio: Optional[str] = None
     ):
         """Save generation metadata to JSON file."""
         import json
@@ -165,12 +181,16 @@ class IconGenerator:
             "generated_at": datetime.datetime.now().isoformat(),
             "subject": subject,
             "style": style,
+            "format": format,
             "model": model,
             "variations": variations,
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "parameters": params,
         }
+
+        if aspect_ratio:
+            metadata["aspect_ratio"] = aspect_ratio
 
         metadata_path = output_dir / "metadata.json"
         with open(metadata_path, 'w') as f:

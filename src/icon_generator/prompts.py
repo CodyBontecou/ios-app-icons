@@ -71,11 +71,25 @@ class IconPrompts:
         )
     )
 
+    # Instagram Style - social media optimized (no app icon language)
+    INSTAGRAM_TEMPLATE = PromptTemplate(
+        positive_template=(
+            "{subject}, {style}, social media post, "
+            "eye-catching design, vibrant colors, professional, "
+            "high quality, engaging visual content"
+        ),
+        negative_prompt=(
+            "text, letters, words, watermark, signature, blurry, "
+            "low quality, distorted, ugly, deformed"
+        )
+    )
+
     STYLE_MAP = {
         "ios": IOS_TEMPLATE,
         "flat": FLAT_TEMPLATE,
         "vector": VECTOR_TEMPLATE,
         "custom": CUSTOM_TEMPLATE,
+        "instagram": INSTAGRAM_TEMPLATE,
     }
 
     @classmethod
@@ -95,10 +109,24 @@ class IconPrompts:
         style: str = "ios",
         color: Optional[str] = None,
         extra_style: str = "modern, colorful",
-        custom_style: Optional[str] = None
+        custom_style: Optional[str] = None,
+        format: str = "ios"
     ) -> Dict[str, str]:
-        """Build a complete prompt for the given parameters."""
-        template = cls.get_template(style)
+        """Build a complete prompt for the given parameters.
+
+        Args:
+            subject: The subject to generate
+            style: Icon/post style (ios, flat, vector, custom, instagram)
+            color: Background color (for flat style)
+            extra_style: Additional style descriptors
+            custom_style: Full custom prompt for style="custom"
+            format: Output format ("ios" for app icons, "instagram" for social media)
+        """
+        # For Instagram format, use Instagram template unless custom style specified
+        if format == "instagram" and style != "custom":
+            template = cls.INSTAGRAM_TEMPLATE
+        else:
+            template = cls.get_template(style)
 
         kwargs = {
             "style": extra_style,
