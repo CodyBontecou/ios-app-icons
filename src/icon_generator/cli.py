@@ -232,6 +232,29 @@ def generate(
     default=Config.DEFAULT_GUIDANCE_SCALE,
     help='Guidance scale for generation'
 )
+@click.option(
+    '--text',
+    type=str,
+    default=None,
+    help='Text to overlay on the image'
+)
+@click.option(
+    '--text-position',
+    type=click.Choice(['top', 'center', 'bottom']),
+    default='top',
+    help='Position of text overlay'
+)
+@click.option(
+    '--text-color',
+    type=str,
+    default='black',
+    help='Text color (black, white, or hex like #FF0000)'
+)
+@click.option(
+    '--no-text-box',
+    is_flag=True,
+    help='Remove background box behind text'
+)
 def instagram(
     subject: str,
     style: str,
@@ -242,7 +265,11 @@ def instagram(
     output_dir: str,
     model: str,
     steps: int,
-    guidance_scale: float
+    guidance_scale: float,
+    text: str,
+    text_position: str,
+    text_color: str,
+    no_text_box: bool
 ):
     """Generate AI-powered Instagram posts."""
 
@@ -292,11 +319,42 @@ def instagram(
             click.echo(f"\n🔧 Processing for Instagram...")
 
             originals_dir = output_path / "originals"
-            results = IconProcessor.process_instagram_images(
-                originals_dir=originals_dir,
-                output_base_dir=output_path,
-                aspect_ratio=aspect_ratio
-            )
+
+            # Parse text color
+            if text_color.lower() == 'black':
+                parsed_text_color = (0, 0, 0)
+            elif text_color.lower() == 'white':
+                parsed_text_color = (255, 255, 255)
+            elif text_color.startswith('#'):
+                hex_color = text_color.lstrip('#')
+                parsed_text_color = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            else:
+                parsed_text_color = (0, 0, 0)
+
+            # Determine box color based on text color
+            if no_text_box:
+                box_color = None
+            elif parsed_text_color == (255, 255, 255):
+                box_color = None  # White text usually means no box
+            else:
+                box_color = (255, 255, 255)  # White box for dark text
+
+            if text:
+                results = IconProcessor.process_instagram_with_text(
+                    originals_dir=originals_dir,
+                    output_base_dir=output_path,
+                    text=text,
+                    aspect_ratio=aspect_ratio,
+                    position=text_position,
+                    text_color=parsed_text_color,
+                    box_color=box_color
+                )
+            else:
+                results = IconProcessor.process_instagram_images(
+                    originals_dir=originals_dir,
+                    output_base_dir=output_path,
+                    aspect_ratio=aspect_ratio
+                )
 
             total_processed = sum(len(paths) for paths in results.values())
             click.echo(f"\n✅ Generated {total_processed} Instagram posts!")
@@ -306,6 +364,8 @@ def instagram(
             click.echo(f"   Original images: {len(generated_paths)}")
             click.echo(f"   Instagram posts: {total_processed}")
             click.echo(f"   Dimensions: {width}x{height}")
+            if text:
+                click.echo(f"   Text overlay: \"{text[:50]}{'...' if len(text) > 50 else ''}\"")
             click.echo(f"   Output location: {output_path}")
         else:
             click.echo(f"\n⏭️  Skipped post-processing (--no-process flag)")
