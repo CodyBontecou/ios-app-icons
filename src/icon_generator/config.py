@@ -46,10 +46,11 @@ class Config:
     ]
 
     # Instagram Sizes (width x height in pixels)
+    # Note: dimensions must be divisible by 8 for SDXL model
     INSTAGRAM_SIZES = {
-        "square": (1080, 1080),     # Feed posts
-        "portrait": (1080, 1350),   # 4:5 ratio, best engagement
-        "landscape": (1080, 566),   # 1.91:1 ratio
+        "square": (1080, 1080),     # Feed posts (1:1)
+        "portrait": (1080, 1352),   # ~4:5 ratio, best engagement
+        "landscape": (1080, 568),   # ~1.9:1 ratio
         "story": (1080, 1920),      # 9:16 ratio, stories/reels
     }
 

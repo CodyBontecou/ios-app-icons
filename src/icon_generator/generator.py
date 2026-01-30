@@ -154,8 +154,11 @@ class IconGenerator:
                     style=style,
                     variations=variations,
                     color=color,
+                    custom_style=custom_style,
                     output_dir=output_dir,
                     model=Config.ALTERNATIVE_MODEL,
+                    format=format,
+                    aspect_ratio=aspect_ratio,
                     **generation_params
                 )
             raise
