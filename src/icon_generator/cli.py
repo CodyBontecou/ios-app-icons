@@ -67,21 +67,21 @@ def cli():
 )
 @click.option(
     '--model',
-    type=str,
-    default=None,
-    help='Replicate model to use (advanced)'
+    type=click.Choice(['sdxl', 'flux-schnell', 'flux-dev', 'flux-pro']),
+    default='sdxl',
+    help='AI model to use for generation'
 )
 @click.option(
     '--steps',
     type=int,
-    default=Config.DEFAULT_STEPS,
-    help='Number of inference steps'
+    default=None,
+    help='Number of inference steps (uses model default if not set)'
 )
 @click.option(
     '--guidance-scale',
     type=float,
-    default=Config.DEFAULT_GUIDANCE_SCALE,
-    help='Guidance scale for generation'
+    default=None,
+    help='Guidance scale (uses model default if not set)'
 )
 def generate(
     subject: str,
@@ -120,6 +120,13 @@ def generate(
         # Initialize generator
         generator = IconGenerator()
 
+        # Build generation params (only include if set)
+        gen_params = {}
+        if steps is not None:
+            gen_params["steps"] = steps
+        if guidance_scale is not None:
+            gen_params["guidance_scale"] = guidance_scale
+
         # Generate icons
         generated_paths = generator.generate(
             subject=subject,
@@ -129,8 +136,7 @@ def generate(
             custom_style=custom_style,
             output_dir=output_path,
             model=model,
-            steps=steps,
-            guidance_scale=guidance_scale
+            **gen_params
         )
 
         click.echo(f"\n✨ Generated {len(generated_paths)} variations!")
@@ -216,27 +222,27 @@ def generate(
 )
 @click.option(
     '--model',
-    type=str,
-    default=None,
-    help='Replicate model to use (advanced)'
+    type=click.Choice(['sdxl', 'flux-schnell', 'flux-dev', 'flux-pro']),
+    default='sdxl',
+    help='AI model (flux models have better text rendering)'
 )
 @click.option(
     '--steps',
     type=int,
-    default=Config.DEFAULT_STEPS,
-    help='Number of inference steps'
+    default=None,
+    help='Number of inference steps (uses model default if not set)'
 )
 @click.option(
     '--guidance-scale',
     type=float,
-    default=Config.DEFAULT_GUIDANCE_SCALE,
-    help='Guidance scale for generation'
+    default=None,
+    help='Guidance scale (uses model default if not set)'
 )
 @click.option(
     '--text',
     type=str,
     default=None,
-    help='Text to overlay on the image'
+    help='Text to overlay on the image (post-processing)'
 )
 @click.option(
     '--text-position',
@@ -255,6 +261,24 @@ def generate(
     is_flag=True,
     help='Remove background box behind text'
 )
+@click.option(
+    '--text-style',
+    type=click.Choice(['classic', 'brutalist']),
+    default='classic',
+    help='Text style: classic (serif) or brutalist (monospace, bold, wide tracking)'
+)
+@click.option(
+    '--layout',
+    type=click.Choice(['overlay', 'card']),
+    default='overlay',
+    help='Layout style: overlay (text on image) or card (image top, text below on solid bg)'
+)
+@click.option(
+    '--bg-color',
+    type=str,
+    default='black',
+    help='Background color for card layout (black, white, or hex like #1a1a1a)'
+)
 def instagram(
     subject: str,
     style: str,
@@ -269,7 +293,10 @@ def instagram(
     text: str,
     text_position: str,
     text_color: str,
-    no_text_box: bool
+    no_text_box: bool,
+    text_style: str,
+    layout: str,
+    bg_color: str
 ):
     """Generate AI-powered Instagram posts."""
 
@@ -298,6 +325,13 @@ def instagram(
         # Initialize generator
         generator = IconGenerator()
 
+        # Build generation params (only include if set)
+        gen_params = {}
+        if steps is not None:
+            gen_params["steps"] = steps
+        if guidance_scale is not None:
+            gen_params["guidance_scale"] = guidance_scale
+
         # Generate images
         generated_paths = generator.generate(
             subject=subject,
@@ -308,8 +342,7 @@ def instagram(
             model=model,
             format="instagram",
             aspect_ratio=aspect_ratio,
-            steps=steps,
-            guidance_scale=guidance_scale
+            **gen_params
         )
 
         click.echo(f"\n✨ Generated {len(generated_paths)} variations!")
@@ -339,7 +372,28 @@ def instagram(
             else:
                 box_color = (255, 255, 255)  # White box for dark text
 
-            if text:
+            # Parse background color for card layout
+            if bg_color.lower() == 'black':
+                parsed_bg_color = (0, 0, 0)
+            elif bg_color.lower() == 'white':
+                parsed_bg_color = (255, 255, 255)
+            elif bg_color.startswith('#'):
+                hex_bg = bg_color.lstrip('#')
+                parsed_bg_color = tuple(int(hex_bg[i:i+2], 16) for i in (0, 2, 4))
+            else:
+                parsed_bg_color = (0, 0, 0)
+
+            if text and layout == 'card':
+                # Card layout: image on top, text below on solid background
+                results = IconProcessor.process_card_layout(
+                    originals_dir=originals_dir,
+                    output_base_dir=output_path,
+                    text=text,
+                    aspect_ratio=aspect_ratio,
+                    bg_color=parsed_bg_color,
+                    text_color=parsed_text_color
+                )
+            elif text:
                 results = IconProcessor.process_instagram_with_text(
                     originals_dir=originals_dir,
                     output_base_dir=output_path,
@@ -347,7 +401,8 @@ def instagram(
                     aspect_ratio=aspect_ratio,
                     position=text_position,
                     text_color=parsed_text_color,
-                    box_color=box_color
+                    box_color=box_color,
+                    text_style=text_style
                 )
             else:
                 results = IconProcessor.process_instagram_images(
@@ -410,6 +465,11 @@ def info():
     click.echo(f"   • flat   - Minimalist flat design icons")
     click.echo(f"   • vector - Vector illustration style")
     click.echo(f"   • custom - Custom prompt (use --custom-style)")
+
+    click.echo(f"\nAvailable Models:")
+    for name, config in Config.MODELS.items():
+        default = " (default)" if name == Config.DEFAULT_MODEL else ""
+        click.echo(f"   • {name}{default} - {config['description']}")
 
     click.echo(f"\niOS Icon Sizes:")
     sizes_str = ", ".join(str(s) for s in Config.IOS_ICON_SIZES)

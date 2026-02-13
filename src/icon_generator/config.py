@@ -27,9 +27,58 @@ class Config:
     DEFAULT_VARIATIONS = 4
 
     # Model Selection
-    # Using SDXL as the primary model
-    DEFAULT_MODEL = "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b"
-    ALTERNATIVE_MODEL = "black-forest-labs/flux-schnell:f2ab8a5569a0d8780f87f3eeb314deeae2fb23c28e207e65ca3dbcf84eb4f6a5"
+    DEFAULT_MODEL = "sdxl"
+
+    # Available models with their Replicate IDs and configurations
+    MODELS = {
+        "sdxl": {
+            "id": "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+            "supports_negative_prompt": True,
+            "supports_num_outputs": True,
+            "default_steps": 30,
+            "default_guidance": 7.0,
+            "size_param": "width_height",  # separate width/height params
+            "description": "Stable Diffusion XL - good quality, flexible",
+        },
+        "flux-schnell": {
+            "id": "black-forest-labs/flux-schnell",
+            "supports_negative_prompt": False,
+            "supports_num_outputs": True,
+            "default_steps": 4,
+            "default_guidance": 0,  # flux-schnell doesn't use guidance
+            "size_param": "aspect_ratio",  # uses aspect_ratio param
+            "description": "Flux Schnell - fast generation, decent text",
+        },
+        "flux-dev": {
+            "id": "black-forest-labs/flux-dev",
+            "supports_negative_prompt": False,
+            "supports_num_outputs": True,
+            "default_steps": 28,
+            "default_guidance": 3.5,
+            "size_param": "aspect_ratio",
+            "description": "Flux Dev - better quality, good text rendering",
+        },
+        "flux-pro": {
+            "id": "black-forest-labs/flux-1.1-pro",
+            "supports_negative_prompt": False,
+            "supports_num_outputs": False,  # pro only does 1 at a time
+            "default_steps": 25,
+            "default_guidance": 3.0,
+            "size_param": "aspect_ratio",
+            "output_format": "png",  # Request PNG to avoid WebP issues
+            "description": "Flux Pro 1.1 - best quality, best text rendering",
+        },
+    }
+
+    @classmethod
+    def get_model_config(cls, model_name: str) -> dict:
+        """Get configuration for a specific model."""
+        if model_name not in cls.MODELS:
+            raise ValueError(
+                f"Unknown model '{model_name}'. "
+                f"Available models: {', '.join(cls.MODELS.keys())}"
+            )
+        return cls.MODELS[model_name]
 
     # iOS Icon Sizes (width x height in pixels)
     IOS_ICON_SIZES = [

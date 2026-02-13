@@ -28,8 +28,19 @@ ENV/
 # Environment variables
 .env
 
-# Output directory
+# Generated output
 output/
+
+# Test screenshots
+test-screenshots/
+
+# Node
+node_modules/
+package-lock.json
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
 
 # IDE
 .vscode/
@@ -41,3 +52,13 @@ output/
 # OS
 .DS_Store
 Thumbs.db
+
+# Beads issue tracker
+.beads/
+
+# Alembic
+migrations/__pycache__/
+migrations/versions/__pycache__/
+
+# Misc
+icon-style/

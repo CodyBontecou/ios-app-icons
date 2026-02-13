@@ -1,230 +1,167 @@
 # iOS App Icon Generator
 
-AI-powered CLI tool for generating iOS app icons using Stable Diffusion. Automatically creates icons in all required iOS sizes with optional background removal and rounded corner masking.
+AI-powered CLI and web API for generating iOS app icons, web favicons, and Instagram posts using image generation models via [Replicate](https://replicate.com/).
+
+Give it a text prompt, pick a style, and get back production-ready assets — all iOS icon sizes (1024 → 20px), favicon bundles (`.ico`, `.png`, webmanifest), or Instagram-optimized images with optional text overlays.
 
 ## Features
 
-- 🎨 **AI-Powered Generation**: Uses Stable Diffusion via Replicate API
-- 📱 **iOS-Ready**: Generates all required iOS app icon sizes
-- 🎭 **Multiple Styles**: iOS, flat, and vector illustration styles
-- 🔄 **Batch Processing**: Generate multiple variations at once
-- ✂️ **Background Removal**: Optional automatic background removal with rembg
-- 🔲 **iOS Masking**: Applies authentic iOS rounded corner masks
-- 📦 **Optimized Output**: PNG compression for smaller file sizes
-
-## Installation
-
-1. **Clone the repository**:
-```bash
-cd /Users/codybontecou/dev/ios-app-icons
-```
-
-2. **Install the package**:
-```bash
-pip install -e .
-```
-
-3. **Set up your API token**:
-```bash
-cp .env.example .env
-# Edit .env and add your Replicate API token
-```
-
-Get your Replicate API token from: https://replicate.com/account/api-tokens
+- **Multiple AI models** — SDXL, Flux Schnell, Flux Dev, Flux Pro
+- **iOS icon pipeline** — generates every required App Store size, applies rounded-corner masks, optional background removal via `rembg`
+- **Favicon generation** — standalone TypeScript scripts produce `.ico`, apple-touch-icon, android-chrome PNGs, and `site.webmanifest`
+- **Instagram posts** — square, portrait, landscape, and story aspect ratios with text overlay and card layout options
+- **Web API + React frontend** — FastAPI backend with auth, job queue, and a React UI (optional)
+- **Custom prompts** — use preset styles (ios, flat, vector) or pass any prompt you want
 
 ## Quick Start
 
-Generate iOS app icons:
-
 ```bash
-icon-gen generate --subject "happy cat" --style ios --variations 4
+# 1. Clone & setup
+git clone https://github.com/CodyBontecou/ios-app-icons.git
+cd ios-app-icons
+./setup.sh          # creates venv, installs deps
+
+# 2. Add your Replicate API token
+cp .env.example .env
+# edit .env → REPLICATE_API_TOKEN=r8_...
+
+# 3. Generate icons
+source venv/bin/activate
+icon-gen generate --subject "happy cat"
 ```
 
-This will:
-1. Generate 4 AI-powered variations
-2. Remove backgrounds
-3. Apply iOS rounded corner masks
-4. Create all iOS icon sizes (1024px down to 20px)
-5. Save everything to `output/happy_cat-{timestamp}/`
+Output lands in `output/<subject>-<timestamp>/` with `originals/`, `processed/`, and `metadata.json`.
 
-## Usage
+## CLI Usage
 
-### Basic Generation
+### Generate iOS app icons
 
 ```bash
-# Generate iOS-style icons
 icon-gen generate --subject "mountain logo"
-
-# Generate flat minimalist icons
-icon-gen generate --subject "coffee cup" --style flat --color "blue"
-
-# Generate vector illustrations
-icon-gen generate --subject "rocket ship" --style vector
+icon-gen generate --subject "coffee cup" --style flat --color blue
+icon-gen generate --subject "rocket" --style vector --variations 8
+icon-gen generate --subject "my concept" --style custom --custom-style "watercolor botanical illustration, soft edges"
 ```
 
-### Advanced Options
+### Choose a model
 
 ```bash
-icon-gen generate \
-  --subject "your subject" \
-  --style ios \
-  --variations 6 \
-  --output-dir ./my-icons \
-  --steps 40 \
-  --guidance-scale 8.0
+icon-gen generate --subject "cat" --model flux-dev   # better quality, good text
+icon-gen generate --subject "cat" --model flux-pro   # best quality
+icon-gen generate --subject "cat" --model sdxl       # default, most flexible
 ```
 
-### Skip Post-Processing
+### Generate Instagram posts
 
 ```bash
-# Only generate original images (no resizing/masking)
-icon-gen generate --subject "cat" --no-process
-
-# Generate without background removal
-icon-gen generate --subject "cat" --no-remove-bg
-
-# Generate without iOS rounded corners
-icon-gen generate --subject "cat" --no-mask
+icon-gen instagram --subject "product shot" --aspect-ratio portrait \
+  --text "NEW DROP" --text-style brutalist --text-color white
 ```
 
-### Configuration Info
+### Skip processing steps
 
 ```bash
-# View current configuration
+icon-gen generate --subject "cat" --no-process      # originals only
+icon-gen generate --subject "cat" --no-remove-bg    # keep backgrounds
+icon-gen generate --subject "cat" --no-mask         # skip rounded corners
+```
+
+### Show config
+
+```bash
 icon-gen info
 ```
 
-## Command Reference
+## Favicon Scripts (TypeScript)
 
-### `generate`
+Standalone scripts that generate full favicon bundles using Replicate + Sharp:
 
-Generate AI-powered app icons.
+```bash
+npm install
 
-**Options**:
-- `--subject TEXT` (required): What to generate (e.g., "happy cat", "mountain logo")
-- `--style [ios|flat|vector]`: Icon style (default: ios)
-- `--variations INTEGER`: Number of variations (default: 4)
-- `--color TEXT`: Background color for flat style
-- `--no-process`: Skip post-processing
-- `--no-mask`: Skip iOS rounded corner mask
-- `--no-remove-bg`: Skip background removal
-- `--output-dir PATH`: Custom output directory
-- `--model TEXT`: Replicate model (advanced)
-- `--steps INTEGER`: Inference steps (default: 30)
-- `--guidance-scale FLOAT`: Guidance scale (default: 7.0)
+# Generic AI favicon from a text prompt
+npx tsx favicon-generator.ts "minimalist rocket logo" --style modern
 
-### `info`
+# Project-specific generators
+npx tsx generate-smartskin-icon.ts
+npx tsx generate-cc-favicon.ts
+```
 
-Show configuration and system information.
+## Web API (Optional)
+
+A FastAPI backend with user auth (OAuth + JWT), a background job queue, and a React frontend.
+
+```bash
+# Start Postgres
+docker compose up -d
+
+# Run migrations
+alembic upgrade head
+
+# Start the API
+source venv/bin/activate
+uvicorn icon_generator.api.main:app --reload
+
+# Start the frontend
+cd frontend && npm install && npm run dev
+```
 
 ## Output Structure
 
 ```
-output/
-└── {subject}-{timestamp}/
-    ├── originals/              # AI-generated source images
-    │   ├── variant-1.png
-    │   ├── variant-2.png
-    │   ├── variant-3.png
-    │   └── variant-4.png
-    ├── processed/              # Processed icons in all sizes
-    │   ├── variant-1/
-    │   │   ├── AppIcon-1024.png
-    │   │   ├── AppIcon-180.png
-    │   │   ├── AppIcon-120.png
-    │   │   └── ... (all iOS sizes)
-    │   └── variant-2/
-    │       └── ...
-    └── metadata.json           # Generation parameters
+output/<subject>-<timestamp>/
+├── originals/           # AI-generated source images
+│   ├── variant-1.png
+│   └── ...
+├── processed/           # Resized + masked icons
+│   ├── variant-1/
+│   │   ├── AppIcon-1024.png
+│   │   ├── AppIcon-180.png
+│   │   └── ...
+│   └── ...
+├── metadata.json        # Prompt, model, parameters
+└── prompt.txt           # Raw prompt used
 ```
 
 ## iOS Icon Sizes
 
-The tool generates all required iOS app icon sizes:
+| Size | Usage |
+|------|-------|
+| 1024 | App Store |
+| 180 | iPhone @3x |
+| 167 | iPad Pro @2x |
+| 152 | iPad @2x |
+| 120 | iPhone @2x |
+| 76 | iPad @1x |
+| 60 | Spotlight |
+| 40 | Spotlight @2x |
+| 29 | Settings |
+| 20 | Notification |
 
-- **1024×1024** - App Store
-- **180×180** - iPhone @3x
-- **120×120** - iPhone @2x
-- **167×167** - iPad Pro @2x
-- **152×152** - iPad @2x
-- **76×76** - iPad @1x
-- **60×60** - iPhone Spotlight
-- **40×40** - Spotlight @2x
-- **29×29** - Settings
-- **20×20** - Notification
+## Project Structure
 
-## Styles
-
-### iOS Style
-Modern, rounded app icon style with gradients and depth. Perfect for App Store submissions.
-
-```bash
-icon-gen generate --subject "your app concept" --style ios
+```
+src/icon_generator/
+├── cli.py            # Click CLI (icon-gen command)
+├── config.py         # Model configs, sizes, env loading
+├── generator.py      # Replicate API integration
+├── processor.py      # Resize, mask, bg removal, text overlay
+├── prompts.py        # Prompt templates per style
+├── api/              # FastAPI web backend
+├── auth/             # OAuth + JWT auth
+└── db/               # Async SQLAlchemy + Postgres
+frontend/             # React + Vite UI
+migrations/           # Alembic DB migrations
+favicon-generator.ts  # Standalone TS favicon tool
 ```
 
-### Flat Style
-Minimalist flat design with solid colors. Great for simple, clean icons.
+## Requirements
 
-```bash
-icon-gen generate --subject "your app concept" --style flat --color "purple"
-```
-
-### Vector Style
-Vector illustration style with smooth curves and vibrant colors.
-
-```bash
-icon-gen generate --subject "your app concept" --style vector
-```
-
-## Tips for Best Results
-
-1. **Be Specific**: "blue rocket ship with stars" works better than just "rocket"
-2. **Use Style Keywords**: Include words like "modern", "minimalist", "colorful"
-3. **Iterate**: Generate multiple variations and pick the best one
-4. **Post-Process**: The default settings (background removal + iOS mask) work well for most cases
-5. **Cost**: Each generation costs ~$0.01-0.05 on Replicate (depends on model and steps)
-
-## Troubleshooting
-
-### "REPLICATE_API_TOKEN not found"
-- Copy `.env.example` to `.env`
-- Add your API token from https://replicate.com/account/api-tokens
-
-### First Run is Slow
-- The `rembg` library downloads a ~200MB model on first use
-- Subsequent runs will be much faster
-
-### Generation Failed
-- Check your Replicate account has credits
-- Try the alternative model with `--model` flag
-- Reduce `--steps` for faster (but lower quality) generation
-
-## Development
-
-```bash
-# Install in development mode
-pip install -e .
-
-# Run from source
-python -m icon_generator.cli generate --subject "test"
-```
-
-## Dependencies
-
-- `replicate` - AI model API
-- `pillow` - Image processing
-- `rembg` - Background removal
-- `click` - CLI framework
-- `python-dotenv` - Environment variables
-- `requests` - HTTP client
+- Python 3.13+
+- A [Replicate API token](https://replicate.com/account/api-tokens) (~$0.01–0.05 per generation)
+- Node.js 18+ (only for TypeScript favicon scripts or frontend)
+- Docker (only for web API's Postgres database)
 
 ## License
 
 MIT
-
-## Credits
-
-Built with:
-- [Replicate](https://replicate.com/) - AI model hosting
-- [Stable Diffusion](https://stability.ai/) - Image generation
-- [rembg](https://github.com/danielgatis/rembg) - Background removal

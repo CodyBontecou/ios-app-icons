@@ -44,7 +44,7 @@ class IconGenerator:
             color: Background color (for flat style)
             custom_style: Full custom prompt for style="custom"
             output_dir: Directory to save generated images
-            model: Replicate model to use (defaults to Config.DEFAULT_MODEL)
+            model: Model to use (sdxl, flux-schnell, flux-dev, flux-pro)
             format: Output format ("ios" for app icons, "instagram" for social media)
             aspect_ratio: For Instagram: "square", "portrait", "landscape", "story"
             **generation_params: Additional parameters for the model
@@ -68,6 +68,11 @@ class IconGenerator:
         originals_dir = output_dir / "originals"
         originals_dir.mkdir(parents=True, exist_ok=True)
 
+        # Get model configuration
+        model_key = model or Config.DEFAULT_MODEL
+        model_config = Config.get_model_config(model_key)
+        model_id = model_config["id"]
+
         # Determine dimensions based on format
         if format == "instagram":
             width, height = Config.INSTAGRAM_SIZES.get(aspect_ratio, (1080, 1080))
@@ -75,57 +80,43 @@ class IconGenerator:
             width = Config.DEFAULT_SIZE
             height = Config.DEFAULT_SIZE
 
-        # Prepare generation parameters
-        model_name = model or Config.DEFAULT_MODEL
-        params = {
-            "prompt": prompt_data["prompt"],
-            "negative_prompt": prompt_data["negative_prompt"],
-            "num_outputs": variations,
-            "width": width,
-            "height": height,
-            "num_inference_steps": generation_params.get("steps", Config.DEFAULT_STEPS),
-            "guidance_scale": generation_params.get("guidance_scale", Config.DEFAULT_GUIDANCE_SCALE),
-        }
-
-        # Add scheduler if supported by the model
-        if "scheduler" in generation_params:
-            params["scheduler"] = generation_params["scheduler"]
+        # Build parameters based on model capabilities
+        params = self._build_model_params(
+            model_config=model_config,
+            prompt=prompt_data["prompt"],
+            negative_prompt=prompt_data["negative_prompt"],
+            width=width,
+            height=height,
+            variations=variations,
+            aspect_ratio=aspect_ratio,
+            generation_params=generation_params
+        )
 
         print(f"🎨 Generating {variations} variations...")
         print(f"📝 Prompt: {prompt_data['prompt'][:100]}...")
-        print(f"🤖 Model: {model_name}")
+        print(f"🤖 Model: {model_key} ({model_config['description']})")
 
         try:
-            # Run the model
-            output = replicate.run(
-                model_name,
-                input=params
-            )
-
-            # Download generated images
             generated_paths = []
 
-            # Handle different output formats from different models
-            if isinstance(output, list):
-                urls = output
+            # Handle models that don't support multiple outputs
+            if not model_config["supports_num_outputs"]:
+                # Generate one at a time
+                for i in range(variations):
+                    print(f"🔄 Generating variation {i + 1}/{variations}...")
+                    output = replicate.run(model_id, input=params)
+                    outputs = self._extract_outputs(output)
+                    if outputs:
+                        path = self._download_image(outputs[0], originals_dir, i + 1)
+                        generated_paths.append(path)
             else:
-                # Some models return a single URL or iterator
-                urls = [output] if isinstance(output, str) else list(output)
+                # Generate all at once
+                output = replicate.run(model_id, input=params)
+                outputs = self._extract_outputs(output)
 
-            for idx, url in enumerate(urls[:variations], 1):
-                print(f"⬇️  Downloading variation {idx}/{len(urls)}...")
-
-                # Download the image
-                response = requests.get(url)
-                response.raise_for_status()
-
-                # Save to file
-                output_path = originals_dir / f"variant-{idx}.png"
-                with open(output_path, 'wb') as f:
-                    f.write(response.content)
-
-                generated_paths.append(output_path)
-                print(f"✅ Saved: {output_path}")
+                for idx, item in enumerate(outputs[:variations], 1):
+                    path = self._download_image(item, originals_dir, idx)
+                    generated_paths.append(path)
 
             # Save metadata
             self._save_metadata(
@@ -133,8 +124,8 @@ class IconGenerator:
                 subject=subject,
                 style=style,
                 prompt=prompt_data["prompt"],
-                negative_prompt=prompt_data["negative_prompt"],
-                model=model_name,
+                negative_prompt=prompt_data.get("negative_prompt", ""),
+                model=model_key,
                 variations=len(generated_paths),
                 params=params,
                 format=format,
@@ -145,23 +136,154 @@ class IconGenerator:
 
         except Exception as e:
             print(f"❌ Error generating icons: {e}")
-
-            # Try alternative model if primary fails
-            if model is None and model_name == Config.DEFAULT_MODEL:
-                print(f"🔄 Trying alternative model...")
-                return self.generate(
-                    subject=subject,
-                    style=style,
-                    variations=variations,
-                    color=color,
-                    custom_style=custom_style,
-                    output_dir=output_dir,
-                    model=Config.ALTERNATIVE_MODEL,
-                    format=format,
-                    aspect_ratio=aspect_ratio,
-                    **generation_params
-                )
             raise
+
+    def _build_model_params(
+        self,
+        model_config: Dict,
+        prompt: str,
+        negative_prompt: str,
+        width: int,
+        height: int,
+        variations: int,
+        aspect_ratio: str,
+        generation_params: Dict
+    ) -> Dict:
+        """Build API parameters based on model capabilities."""
+        params = {"prompt": prompt}
+
+        # Add negative prompt if supported
+        if model_config["supports_negative_prompt"] and negative_prompt:
+            params["negative_prompt"] = negative_prompt
+
+        # Add num_outputs if supported
+        if model_config["supports_num_outputs"]:
+            params["num_outputs"] = variations
+
+        # Handle size parameters
+        if model_config["size_param"] == "width_height":
+            params["width"] = width
+            params["height"] = height
+            params["num_inference_steps"] = generation_params.get(
+                "steps", model_config["default_steps"]
+            )
+        elif model_config["size_param"] == "aspect_ratio":
+            # Convert dimensions to aspect ratio string for Flux
+            params["aspect_ratio"] = self._get_flux_aspect_ratio(width, height)
+            # Flux uses different step parameter names
+            if "steps" in generation_params:
+                params["num_inference_steps"] = generation_params["steps"]
+
+        # Add guidance scale if model uses it
+        if model_config["default_guidance"] > 0:
+            params["guidance_scale"] = generation_params.get(
+                "guidance_scale", model_config["default_guidance"]
+            )
+
+        # Add scheduler if provided and model supports it
+        if "scheduler" in generation_params and model_config["supports_negative_prompt"]:
+            params["scheduler"] = generation_params["scheduler"]
+
+        # Add output format if specified
+        if "output_format" in model_config:
+            params["output_format"] = model_config["output_format"]
+
+        return params
+
+    def _get_flux_aspect_ratio(self, width: int, height: int) -> str:
+        """Convert width/height to Flux aspect ratio string."""
+        ratio = width / height
+
+        # Map to Flux's supported aspect ratios
+        if abs(ratio - 1.0) < 0.1:
+            return "1:1"
+        elif abs(ratio - 16/9) < 0.1:
+            return "16:9"
+        elif abs(ratio - 9/16) < 0.1:
+            return "9:16"
+        elif abs(ratio - 4/5) < 0.1:
+            return "4:5"
+        elif abs(ratio - 5/4) < 0.1:
+            return "5:4"
+        elif abs(ratio - 4/3) < 0.1:
+            return "4:3"
+        elif abs(ratio - 3/4) < 0.1:
+            return "3:4"
+        elif abs(ratio - 3/2) < 0.1:
+            return "3:2"
+        elif abs(ratio - 2/3) < 0.1:
+            return "2:3"
+        elif width > height:
+            return "16:9"  # Default landscape
+        else:
+            return "9:16"  # Default portrait
+
+    def _extract_outputs(self, output) -> List:
+        """Extract outputs from various model output formats."""
+        if isinstance(output, list):
+            return output
+        elif isinstance(output, (str, bytes)):
+            return [output]
+        else:
+            # Handle iterators and FileOutput objects
+            try:
+                return list(output)
+            except:
+                return [output]
+
+    def _download_image(self, output, output_dir: Path, index: int) -> Path:
+        """Download/save image from URL or raw bytes."""
+        print(f"⬇️  Downloading variation {index}...")
+
+        output_path = output_dir / f"variant-{index}.png"
+
+        # Handle different output types from Replicate
+        # FileOutput objects have a 'url' attribute
+        if hasattr(output, 'url'):
+            url = output.url
+            response = requests.get(url)
+            response.raise_for_status()
+            content = response.content
+        elif isinstance(output, bytes):
+            content = output
+        elif hasattr(output, 'read'):
+            content = output.read()
+        elif isinstance(output, str) and output.startswith(('http://', 'https://')):
+            response = requests.get(output)
+            response.raise_for_status()
+            content = response.content
+        else:
+            # Try treating as URL string
+            response = requests.get(str(output))
+            response.raise_for_status()
+            content = response.content
+
+        # Save the content, converting to PNG if needed
+        from PIL import Image
+        import io
+
+        try:
+            # Try to open as image and convert to PNG
+            img = Image.open(io.BytesIO(content))
+            img.save(output_path, 'PNG')
+        except Exception:
+            # If PIL fails, save raw content with appropriate extension
+            # Check if it's WebP
+            if content[:4] == b'RIFF' and content[8:12] == b'WEBP':
+                webp_path = output_dir / f"variant-{index}.webp"
+                with open(webp_path, 'wb') as f:
+                    f.write(content)
+                # Try converting with PIL
+                img = Image.open(webp_path)
+                img.save(output_path, 'PNG')
+                webp_path.unlink()
+            else:
+                # Save as-is
+                with open(output_path, 'wb') as f:
+                    f.write(content)
+
+        print(f"✅ Saved: {output_path}")
+        return output_path
 
     def _save_metadata(
         self,

@@ -276,10 +276,11 @@ class IconProcessor:
         box_color: Optional[Tuple[int, int, int]] = (255, 255, 255),
         font_size: Optional[int] = None,
         padding: int = 40,
-        margin: int = 60
+        margin: int = 60,
+        style: str = "classic"
     ) -> Image.Image:
         """
-        Add text overlay to an image (Daniel Koe style).
+        Add text overlay to an image.
 
         Args:
             image: PIL Image to add text to
@@ -290,6 +291,7 @@ class IconProcessor:
             font_size: Font size (auto-calculated if None)
             padding: Padding inside text box
             margin: Margin from edge of image
+            style: "classic" (serif) or "brutalist" (monospace, bold, wide tracking)
 
         Returns:
             Image with text overlay
@@ -298,34 +300,62 @@ class IconProcessor:
         draw = ImageDraw.Draw(image)
         width, height = image.size
 
-        # Auto-calculate font size based on image width
-        if font_size is None:
-            font_size = int(width * 0.045)
+        # Style-specific settings
+        if style == "brutalist":
+            # Brutalist: large monospace, bold, wide letter-spacing
+            if font_size is None:
+                font_size = int(width * 0.055)  # Large but fits
+            letter_spacing = 0.12  # Wide tracking
+            text = text.upper()  # Brutalist often uses uppercase
 
-        # Try to load a serif font, fall back to default
-        font = None
-        serif_fonts = [
-            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-            "/System/Library/Fonts/Times.ttc",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-            "/usr/share/fonts/TTF/times.ttf",
-        ]
-        for font_path in serif_fonts:
-            try:
-                font = ImageFont.truetype(font_path, font_size)
-                break
-            except (OSError, IOError):
-                continue
+            # Try to load monospace fonts (JetBrains Mono, SF Mono, etc.)
+            font = None
+            mono_fonts = [
+                "/System/Library/Fonts/SFMono-Bold.otf",
+                "/System/Library/Fonts/Supplemental/JetBrains Mono Bold.ttf",
+                "/Library/Fonts/JetBrainsMono-Bold.ttf",
+                "/System/Library/Fonts/Monaco.ttf",
+                "/System/Library/Fonts/Menlo.ttc",
+                "/System/Library/Fonts/Supplemental/Courier New Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            ]
+            for font_path in mono_fonts:
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except (OSError, IOError):
+                    continue
+        else:
+            # Classic: serif font
+            if font_size is None:
+                font_size = int(width * 0.045)
+            letter_spacing = 0
+
+            font = None
+            serif_fonts = [
+                "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+                "/System/Library/Fonts/Times.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+                "/usr/share/fonts/TTF/times.ttf",
+            ]
+            for font_path in serif_fonts:
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except (OSError, IOError):
+                    continue
 
         if font is None:
             font = ImageFont.load_default()
 
         # Calculate text dimensions with word wrapping
-        max_text_width = width - (margin * 2) - (padding * 2)
-        lines = IconProcessor._wrap_text(text, font, max_text_width, draw)
+        # Use larger margins for brutalist style to ensure text fits
+        effective_margin = margin * 1.5 if style == "brutalist" else margin
+        max_text_width = width - (int(effective_margin) * 2) - (padding * 2)
+        lines = IconProcessor._wrap_text(text, font, max_text_width, draw, letter_spacing)
 
         # Calculate total text block height
-        line_height = font_size * 1.3
+        line_height = font_size * 1.4
         total_text_height = len(lines) * line_height
 
         # Calculate box dimensions
@@ -335,9 +365,9 @@ class IconProcessor:
         # Calculate position
         box_x = (width - box_width) // 2
         if position == "top":
-            box_y = margin + int(height * 0.1)
+            box_y = int(effective_margin) + int(height * 0.1)
         elif position == "bottom":
-            box_y = height - box_height - margin - int(height * 0.1)
+            box_y = height - box_height - int(effective_margin) - int(height * 0.08)
         else:  # center
             box_y = (height - box_height) // 2
 
@@ -349,21 +379,62 @@ class IconProcessor:
             )
 
         # Draw text lines
-        text_x = box_x + padding
         text_y = box_y + padding
 
+        # For brutalist style without box, add shadow for readability
+        add_shadow = (style == "brutalist" and box_color is None)
+        shadow_color = (0, 0, 0)  # Black shadow
+        shadow_offset = max(2, int(font_size * 0.04))
+
         for line in lines:
-            # Center each line within the box
-            bbox = draw.textbbox((0, 0), line, font=font)
-            line_width = bbox[2] - bbox[0]
-            line_x = box_x + (box_width - line_width) // 2
-            draw.text((line_x, text_y), line, fill=text_color, font=font)
+            if letter_spacing > 0:
+                # Draw with letter spacing
+                line_width = IconProcessor._get_text_width_with_spacing(line, font, letter_spacing, draw)
+                line_x = box_x + (box_width - line_width) // 2
+                # Draw shadow first if needed
+                if add_shadow:
+                    IconProcessor._draw_text_with_spacing(draw, line_x + shadow_offset, text_y + shadow_offset, line, font, shadow_color, letter_spacing)
+                IconProcessor._draw_text_with_spacing(draw, line_x, text_y, line, font, text_color, letter_spacing)
+            else:
+                # Normal text drawing
+                bbox = draw.textbbox((0, 0), line, font=font)
+                line_width = bbox[2] - bbox[0]
+                line_x = box_x + (box_width - line_width) // 2
+                # Draw shadow first if needed
+                if add_shadow:
+                    draw.text((line_x + shadow_offset, text_y + shadow_offset), line, fill=shadow_color, font=font)
+                draw.text((line_x, text_y), line, fill=text_color, font=font)
             text_y += line_height
 
         return image
 
     @staticmethod
-    def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int, draw: ImageDraw.ImageDraw) -> List[str]:
+    def _get_text_width_with_spacing(text: str, font: ImageFont.ImageFont, spacing: float, draw: ImageDraw.ImageDraw) -> int:
+        """Calculate text width with letter spacing."""
+        total_width = 0
+        for i, char in enumerate(text):
+            bbox = draw.textbbox((0, 0), char, font=font)
+            char_width = bbox[2] - bbox[0]
+            total_width += char_width
+            if i < len(text) - 1:
+                # Add spacing based on font size
+                total_width += int(font.size * spacing)
+        return total_width
+
+    @staticmethod
+    def _draw_text_with_spacing(draw: ImageDraw.ImageDraw, x: int, y: int, text: str, font: ImageFont.ImageFont, color: Tuple[int, int, int], spacing: float):
+        """Draw text with letter spacing."""
+        current_x = x
+        for i, char in enumerate(text):
+            draw.text((current_x, y), char, fill=color, font=font)
+            bbox = draw.textbbox((0, 0), char, font=font)
+            char_width = bbox[2] - bbox[0]
+            current_x += char_width
+            if i < len(text) - 1:
+                current_x += int(font.size * spacing)
+
+    @staticmethod
+    def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int, draw: ImageDraw.ImageDraw, letter_spacing: float = 0) -> List[str]:
         """Wrap text to fit within max_width."""
         words = text.split()
         lines = []
@@ -371,8 +442,11 @@ class IconProcessor:
 
         for word in words:
             test_line = ' '.join(current_line + [word])
-            bbox = draw.textbbox((0, 0), test_line, font=font)
-            line_width = bbox[2] - bbox[0]
+            if letter_spacing > 0:
+                line_width = IconProcessor._get_text_width_with_spacing(test_line, font, letter_spacing, draw)
+            else:
+                bbox = draw.textbbox((0, 0), test_line, font=font)
+                line_width = bbox[2] - bbox[0]
 
             if line_width <= max_width:
                 current_line.append(word)
@@ -387,6 +461,170 @@ class IconProcessor:
         return lines
 
     @staticmethod
+    def generate_card_layout(
+        input_path: Path,
+        output_dir: Path,
+        text: str,
+        aspect_ratio: str = "square",
+        bg_color: Tuple[int, int, int] = (0, 0, 0),
+        text_color: Tuple[int, int, int] = (255, 255, 255),
+        image_ratio: float = 0.6
+    ) -> List[Path]:
+        """
+        Generate card layout with image on top, text below on solid background.
+        Similar to Daniela Koe's style posts.
+
+        Args:
+            input_path: Path to source image
+            output_dir: Directory to save output
+            text: Text to display below image
+            aspect_ratio: Instagram aspect ratio
+            bg_color: Background color (default black)
+            text_color: Text color (default white)
+            image_ratio: Portion of height for image (0.0-1.0, default 0.6)
+
+        Returns:
+            List of output paths
+        """
+        from PIL import ImageFilter, ImageOps
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get target dimensions
+        target_size = Config.INSTAGRAM_SIZES.get(aspect_ratio, (1080, 1080))
+        target_width, target_height = target_size
+
+        # Create canvas with background color
+        canvas = Image.new('RGB', (target_width, target_height), bg_color)
+
+        # Load image
+        image = Image.open(input_path)
+        if image.mode == 'RGBA':
+            # Use bg_color for transparency
+            background = Image.new('RGB', image.size, bg_color)
+            background.paste(image, mask=image.split()[3])
+            image = background
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # Calculate image area dimensions
+        image_area_height = int(target_height * image_ratio)
+
+        # Resize image to fit width, maintaining aspect ratio
+        img_aspect = image.width / image.height
+        target_img_width = target_width
+        target_img_height = int(target_width / img_aspect)
+
+        # If image is too tall, fit to height instead
+        if target_img_height > image_area_height:
+            target_img_height = image_area_height
+            target_img_width = int(image_area_height * img_aspect)
+
+        resized_img = image.resize((target_img_width, target_img_height), Image.Resampling.LANCZOS)
+
+        # Center image horizontally, position at top
+        img_x = (target_width - target_img_width) // 2
+        img_y = (image_area_height - target_img_height) // 2
+
+        canvas.paste(resized_img, (img_x, img_y))
+
+        # Add text below image
+        draw = ImageDraw.Draw(canvas)
+
+        # Load serif font
+        font_size = int(target_width * 0.042)  # Clean readable size
+        font = None
+        serif_fonts = [
+            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+            "/System/Library/Fonts/Times.ttc",
+            "/Library/Fonts/Georgia.ttf",
+            "/System/Library/Fonts/Supplemental/Georgia.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+        ]
+        for font_path in serif_fonts:
+            try:
+                font = ImageFont.truetype(font_path, font_size)
+                break
+            except (OSError, IOError):
+                continue
+        if font is None:
+            font = ImageFont.load_default()
+
+        # Text area
+        text_margin = int(target_width * 0.08)
+        text_top = image_area_height + int(target_height * 0.05)
+        max_text_width = target_width - (text_margin * 2)
+
+        # Wrap text
+        lines = IconProcessor._wrap_text(text, font, max_text_width, draw)
+
+        # Draw text lines (left-aligned)
+        line_height = font_size * 1.5
+        y = text_top
+        for line in lines:
+            draw.text((text_margin, y), line, fill=text_color, font=font)
+            y += line_height
+
+        # Save
+        output_path = output_dir / f"post-{target_width}x{target_height}.png"
+        canvas.save(output_path, 'PNG', optimize=True)
+
+        return [output_path]
+
+    @staticmethod
+    def process_card_layout(
+        originals_dir: Path,
+        output_base_dir: Path,
+        text: str,
+        aspect_ratio: str = "square",
+        bg_color: Tuple[int, int, int] = (0, 0, 0),
+        text_color: Tuple[int, int, int] = (255, 255, 255),
+        image_ratio: float = 0.6
+    ) -> Dict[str, List[Path]]:
+        """
+        Process all images with card layout (image top, text bottom).
+
+        Args:
+            originals_dir: Directory containing original generated images
+            output_base_dir: Base output directory
+            text: Text to display below image
+            aspect_ratio: Instagram aspect ratio
+            bg_color: Background color
+            text_color: Text color
+            image_ratio: Portion of height for image
+
+        Returns:
+            Dictionary mapping variant names to lists of generated paths
+        """
+        instagram_dir = output_base_dir / "instagram"
+        instagram_dir.mkdir(parents=True, exist_ok=True)
+
+        results = {}
+        original_images = sorted(originals_dir.glob("variant-*.png"))
+
+        for idx, original_path in enumerate(original_images, 1):
+            variant_name = original_path.stem
+            print(f"\n📸 Processing {variant_name} with card layout...")
+
+            variant_dir = instagram_dir / variant_name
+            variant_dir.mkdir(exist_ok=True)
+
+            paths = IconProcessor.generate_card_layout(
+                input_path=original_path,
+                output_dir=variant_dir,
+                text=text,
+                aspect_ratio=aspect_ratio,
+                bg_color=bg_color,
+                text_color=text_color,
+                image_ratio=image_ratio
+            )
+
+            results[variant_name] = paths
+            print(f"✅ Processed card layout for {variant_name}")
+
+        return results
+
+    @staticmethod
     def generate_instagram_with_text(
         input_path: Path,
         output_dir: Path,
@@ -394,7 +632,8 @@ class IconProcessor:
         aspect_ratio: str = "square",
         position: str = "top",
         text_color: Tuple[int, int, int] = (0, 0, 0),
-        box_color: Optional[Tuple[int, int, int]] = (255, 255, 255)
+        box_color: Optional[Tuple[int, int, int]] = (255, 255, 255),
+        text_style: str = "classic"
     ) -> List[Path]:
         """
         Generate Instagram image with text overlay.
@@ -407,6 +646,7 @@ class IconProcessor:
             position: Text position ("top", "center", "bottom")
             text_color: RGB color for text
             box_color: RGB color for text box background (None for no box)
+            text_style: "classic" (serif) or "brutalist" (monospace, bold)
 
         Returns:
             List of output paths
@@ -437,7 +677,8 @@ class IconProcessor:
             text,
             position=position,
             text_color=text_color,
-            box_color=box_color
+            box_color=box_color,
+            style=text_style
         )
 
         # Apply slight sharpening
@@ -457,7 +698,8 @@ class IconProcessor:
         aspect_ratio: str = "square",
         position: str = "top",
         text_color: Tuple[int, int, int] = (0, 0, 0),
-        box_color: Optional[Tuple[int, int, int]] = (255, 255, 255)
+        box_color: Optional[Tuple[int, int, int]] = (255, 255, 255),
+        text_style: str = "classic"
     ) -> Dict[str, List[Path]]:
         """
         Process all generated images for Instagram with text overlay.
@@ -470,6 +712,7 @@ class IconProcessor:
             position: Text position
             text_color: Text color
             box_color: Box background color (None for no box)
+            text_style: "classic" (serif) or "brutalist" (monospace, bold)
 
         Returns:
             Dictionary mapping variant names to lists of generated paths
@@ -494,7 +737,8 @@ class IconProcessor:
                 aspect_ratio=aspect_ratio,
                 position=position,
                 text_color=text_color,
-                box_color=box_color
+                box_color=box_color,
+                text_style=text_style
             )
 
             results[variant_name] = paths
